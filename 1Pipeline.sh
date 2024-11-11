@@ -640,18 +640,28 @@ Pavian桑基图：https://fbreitwieser.shinyapps.io/pavian/ 在线可视化:，�
         -1 `tail -n+2 result/metadata.txt|cut -f1|sed 's/^/temp\/hr\//;s/$/_1.fastq/'|tr '\n' ','|sed 's/,$//'` \
         -2 `tail -n+2 result/metadata.txt|cut -f1|sed 's/^/temp\/hr\//;s/$/_2.fastq/'|tr '\n' ','|sed 's/,$//'` \
         -o temp/megahit 
+
+    # 若中断 可继续运行   
+    # megahit --continue -o temp/megahit
+    # 若反复中断，可能是运行内存不足，需减少样本数量，重新运行？
     # 统计大小通常300M~5G，如18s100G10h1.8G
     # 如果contigs太多，可以按长度筛选，降低数据量，提高基因完整度，详见附录megahit
     seqkit stat temp/megahit/final.contigs.fa
     # 预览重叠群最前6行，前60列字符
     head -n6 temp/megahit/final.contigs.fa | cut -c1-60
 
+    #若将样本多次分开运行，需各自命名后，合并分开组装的contigs
+    #cat result/megahit/*.contigs.fa > result/megahit/final.contigs
+    #查看文件大小
+    #ls -lsh result/megahit/final.contigs
+    #head -n 6 result/megahit/final.contigs | cut -c1-60
+    
     # 备份重要结果
     mkdir -p result/megahit/
     ln -f temp/megahit/final.contigs.fa result/megahit/
     # 删除临时文件
     /bin/rm -rf temp/megahit/intermediate_contigs
-
+    
 ### (可选)metaSPAdes精细组装
 
     # 精细但使用内存和时间更多，15~65m
@@ -736,6 +746,63 @@ Pavian桑基图：https://fbreitwieser.shinyapps.io/pavian/ 在线可视化:，�
         > result/NR/protein.fa 
     # 两批数据去冗余使用cd-hit-est-2d加速，见附录
 
+    #若分批组装后合并 可能存在重复的命名
+    #查找重复命名
+    awk '/^>/{split($1,a,"|"); print a[1]}' result/NR/nucleotide.fa | sort | uniq -d
+
+    awk '
+    BEGIN {
+        FS = "[ \t\n]+"; 
+        header = "";
+        seq = "";
+        count = 0;
+        suffix = 0;
+    }
+
+    /^>/ {
+   
+        if (header != "") {
+            print ">" header;
+            print seq;
+        }
+    
+        header_parts = split($0, header_array, " ");
+        header = header_array[1];
+    
+   
+        if (header in header_counts) {
+            header_counts[header]++;
+            header = header "_" header_counts[header];
+        } else {
+            header_counts[header] = 1;
+        }
+    
+
+        seq = "";
+        next;
+    }
+
+    {
+
+        seq = seq $0 "\n";
+    }
+
+
+    END {
+        if (header != "") {
+            print ">" header;
+            print seq;
+        }
+    }
+    ' result/NR/nucleotide.fa > result/NR/modified_file.fasta
+
+    awk '/^>/{print $1}' result/NR/modified_file.fasta | sort | uniq -d
+ 
+    # 翻译修正命名后的核酸为对应蛋白序列, --trim去除结尾的*
+    seqkit translate --trim result/NR/modified_file.fasta \
+        > result/NR/protein.fa 
+
+
 ### salmon基因定量quantitfy
 
     # 输入文件：去冗余后的基因序列：result/NR/nucleotide.fa
@@ -800,13 +867,17 @@ Pavian桑基图：https://fbreitwieser.shinyapps.io/pavian/ 在线可视化:，�
     emapper.py --version
     # emapper-2.1.7 / Expected eggNOG DB version: 5.0.2 
     # Diamond version found: diamond version 2.0.15
-
     # 运行emapper，18m，默认diamond 1e-3; 2M,32p,1.5h
     mkdir -p temp/eggnog
     time emapper.py --data_dir ${db}/eggnog \
       -i result/NR/protein.fa --cpu 3 -m diamond --override \
       -o temp/eggnog/output
 
+    #若无法成功运行，可能是安装错误。安装无法解决的时候，拆分序列后在网站在线预测
+    #seqkit split --by-size 100000 --out-dir split unigene_pep.fasta
+    #在线网站http://eggnog-mapper.embl.de/分批提交fasta文件，邮箱中下载output.emapper.annotations文件于temp文件夹中，并合并
+    #cat temp/*.annotations > temp/all.annotations
+    
     # 格式化结果并显示表头
     grep -v '^##' temp/eggnog/output.emapper.annotations | sed '1 s/^#//' \
       > temp/eggnog/output
