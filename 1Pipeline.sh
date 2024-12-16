@@ -875,11 +875,11 @@ Pavian桑基图：https://fbreitwieser.shinyapps.io/pavian/ 在线可视化:，�
 
     #若无法成功运行，可能是安装错误。安装无法解决的时候，拆分序列后在网站在线预测
     #seqkit split --by-size 100000 --out-dir split unigene_pep.fasta
-    #在线网站http://eggnog-mapper.embl.de/分批提交fasta文件，邮箱中下载output.emapper.annotations文件于temp文件夹中，并合并
-    #cat temp/*.annotations > temp/all.annotations
+    #在线网站http://eggnog-mapper.embl.de/分批提交fasta文件，邮箱中下载output.emapper.annotations文件于temp/eggnog文件夹中，并合并
+    #cat temp/eggnog/*.annotations > temp/eggnog/all.annotations
     
     # 格式化结果并显示表头
-    grep -v '^##' temp/eggnog/output.emapper.annotations | sed '1 s/^#//' \
+    grep -v '^##' temp/eggnog/all.annotations | sed '1 s/^#//' \
       > temp/eggnog/output
     csvtk -t headers -v temp/eggnog/output
 
